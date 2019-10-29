@@ -7,10 +7,11 @@
 
 const char data_folder[NAME_MAX] = "./data/";
 
-int main()
+int main(int argc, char* args[])
 {
 	struct BMP_Picture* pic;
 	size_t bmp_size;
+	size_t bmp_height;
 	struct List* pictures;
 	
 	printf("Files in folder: %ld\n", count_files(data_folder));
@@ -34,7 +35,7 @@ int main()
 	}
                                             
         bmp_size = (size_t) pic->size;
-
+	bmp_height = (size_t) pic->height;
 
 	pictures = init_list(bmp_size); //Only because of this line 
 	push(pictures, pic->data);                                                                      
@@ -52,7 +53,7 @@ int main()
 		}	
 	}
 
-	free_filenames(files, &num);	
+	
 	/*
 	for(size_t j=0; j < lenght(pictures); j++)
 	{
@@ -67,59 +68,97 @@ int main()
 
 	//Calculations:
 
-	double* Imin = (double*) malloc(sizeof(double) * lenght(pictures));
-	double* Imax = (double*) malloc(sizeof(double) * lenght(pictures));
+	double* black_pix = (double*) malloc(sizeof(double) * lenght(pictures));
+	double* white_pix = (double*) malloc(sizeof(double) * lenght(pictures));
 
-	double min_tresh = 0.45f;
-	double min_tresh2 = 0.4f;
-	double max_tresh = 0.5f;
-	double max_tresh2 = 0.95f;
+	double spliting_tresh = 0.42;
 
-	double* contrast = (double*) malloc(sizeof(double) * lenght(pictures));
+	double* grating_d = (double*) malloc(sizeof(double) * lenght(pictures));
 
-	double value_read;
+	double value_read = 0;
+	double pixel_val;
+	double splits = 0;
+
+	
+	double pixel_size = 1;
+	if(argc > 1)
+		pixel_size = (double) atof(args[1]);
+	if(pixel_size < 0)
+		pixel_size = 1;
 
 	for(size_t j=0; j < lenght(pictures); j++)
 	{
-		Imin[j] = 0;
-		Imax[j] = 0;
+		black_pix[j] = 0;
+		white_pix[j] = 0;
 
 		for(size_t i=0; i < bmp_size; i += 3)
 		{
-			value_read = (double) ((unsigned char*) get(pictures, j))[i];
-			value_read /= 255;
+			value_read += (double) ((unsigned char*) get(pictures, j))[i];
+			value_read += (double) ((unsigned char*) get(pictures, j))[i+1];
+			value_read += (double) ((unsigned char*) get(pictures, j))[i+2];
+			pixel_val = (double) value_read / (3.0 * 255.0);
+			value_read = 0;
+			
+			if(pixel_val > spliting_tresh)
+			{
+				white_pix[j] += 1;
+			}
+			else
+			{
+				grating_d[j] += white_pix[j];
+				if(white_pix[j] != 0)
+					splits += 1.0;
+				
+				white_pix[j] = 0;
+			}
 
-			if(value_read > max_tresh && value_read < max_tresh2)
+			if(pixel_val < spliting_tresh)
 			{
-				Imax[j] += value_read; 
+				black_pix[j] += 1;
 			}
-			else if(value_read < min_tresh && value_read > min_tresh2)
+			else
 			{
-				Imin[j] += value_read;
+				grating_d[j] += black_pix[j];
+				black_pix[j] = 0;
 			}
+			
 		}
-		contrast[j] = (Imax[j]-Imin[j])/(Imax[j]+Imin[j]);
-		printf("Photo [%ld] : Contrast = %lf\n", j, contrast[j]);	
+		
+		printf("Split count: %lf\n", splits/bmp_height);
+		if(splits != 0)
+			grating_d[j] /= splits;
+
+		grating_d[j] *= pixel_size;	
+		splits = 0;
+
+		if(pixel_size == 1)
+			printf("Photo [%s] : Average pixel perioid = %lf\n", files[j], grating_d[j]);
+		else if(pixel_size > 1)
+			printf("Photo [%s] : Average grating constant = %lf mm\n", files[j], grating_d[j]);
+		else
+			printf("Photo [%s] : Average grating constant = %lf um\n", files[j], 1000 * grating_d[j]);
+
+	
 	}
 
 	//Plot data:
 
 	init_gnuplot("data.tmp");
-	load_double_data(contrast, lenght(pictures));
+	load_double_data(grating_d, lenght(pictures));
 	write_double_data_tmp();
 	set_style(LINESPOINTS);
 	
-	set_xlabel("Lenght difference [cm]");
-	set_ylabel("Contrast [a. u.]");
-	set_title("Contrast in Michelson interferometer");
+	set_xlabel("Photo num\0");
+	set_ylabel("Grating constant [pixels]\0");
+	set_title("Grating constants in experiment\0");
 	plot_default();
 
 	quit_gnuplot();
 	
-	free(Imin);
-	free(Imax);
-	free(contrast);
-
+	free(white_pix);
+	free(black_pix);
+	free(grating_d);
+	free_filenames(files, &num);	
 	free_list(pictures);
 
 	return 0;

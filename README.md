@@ -1,2 +1,2 @@
 # Interference_analysis
-Program calculating contrast in bmp photos of interference phenomena. 
+Program calculating grating constant in bmp photos of diffraction gratings. 
